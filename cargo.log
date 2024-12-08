@@ -1,0 +1,37 @@
+warning: struct `Message` is never constructed
+  --> src/main.rs:15:8
+   |
+15 | struct Message {
+   |        ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: struct `Report` is never constructed
+  --> src/main.rs:24:8
+   |
+24 | struct Report {
+   |        ^^^^^^
+   |
+   = note: `Report` has a derived impl for the trait `Default`, but this is intentionally ignored during dead code analysis
+
+warning: struct `RegexMatcher` is never constructed
+  --> src/main.rs:32:8
+   |
+32 | struct RegexMatcher {
+   |        ^^^^^^^^^^^^
+   |
+   = note: `RegexMatcher` has a derived impl for the trait `Default`, but this is intentionally ignored during dead code analysis
+
+warning: associated items `new` and `add` are never used
+  --> src/main.rs:38:12
+   |
+37 | impl RegexMatcher {
+   | ----------------- associated items in this implementation
+38 |     pub fn new() -> Self {
+   |            ^^^
+...
+42 |     pub fn add(&mut self, patterns: (&[&str], &[&str])) -> anyhow::Result<()> {
+   |            ^^^
+
+warning: `compmode` (bin "compmode") generated 4 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
