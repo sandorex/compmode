@@ -6,7 +6,7 @@ define! {
 
 #[cfg(test)]
 mod test {
-    use super::super::tests_prelude::*;
+    use regex::Regex;
     use super::PATTERN;
 
     const ERR_MSG: &str = r#"Compiling compmode v0.1.0 (/home/sandorex/ws/compmode)
@@ -35,28 +35,36 @@ warning: `compmode` (bin "compmode") generated 1 warning
     fn pattern_cargo_err() {
         let re = Regex::new(PATTERN.1[0]);
         assert!(re.is_ok(), "Pattern failed to compile");
-
         let re = re.unwrap();
 
         let captures = re.captures(ERR_MSG);
         assert!(captures.is_some(), "Pattern failed to match");
-
         let captures = captures.unwrap();
 
-        let r#type = get_group(&captures, "type");
-        assert_eq!(r#type.as_str(), "error");
+        assert_eq!(
+            captures.name("type").map(|x| x.as_str()),
+            Some("error")
+        );
 
-        let msg = get_group(&captures, "msg");
-        assert_eq!(msg.as_str(), "expected one of `!` or `::`, found `<eof>`");
+        assert_eq!(
+            captures.name("msg").map(|x| x.as_str()),
+            Some("expected one of `!` or `::`, found `<eof>`")
+        );
 
-        let file = get_group(&captures, "file");
-        assert_eq!(file.as_str(), "src/groups.rs");
+        assert_eq!(
+            captures.name("file").map(|x| x.as_str()),
+            Some("src/groups.rs")
+        );
 
-        let line = get_group(&captures, "line");
-        assert_eq!(line.as_str(), "33");
+        assert_eq!(
+            captures.name("line").map(|x| x.as_str()),
+            Some("33")
+        );
 
-        let column = get_group(&captures, "col");
-        assert_eq!(column.as_str(), "1");
+        assert_eq!(
+            captures.name("col").map(|x| x.as_str()),
+            Some("1")
+        );
     }
 
     #[test]
@@ -70,20 +78,30 @@ warning: `compmode` (bin "compmode") generated 1 warning
         assert!(captures.is_some(), "Pattern failed to match");
         let captures = captures.unwrap();
 
-        let r#type = get_group(&captures, "type");
-        assert_eq!(r#type.as_str(), "warning");
+        assert_eq!(
+            captures.name("type").map(|x| x.as_str()),
+            Some("warning")
+        );
 
-        let msg = get_group(&captures, "msg");
-        assert_eq!(msg.as_str(), "constant `x` should have an upper case name");
+        assert_eq!(
+            captures.name("msg").map(|x| x.as_str()),
+            Some("constant `x` should have an upper case name")
+        );
 
-        let file = get_group(&captures, "file");
-        assert_eq!(file.as_str(), "src/groups.rs");
+        assert_eq!(
+            captures.name("file").map(|x| x.as_str()),
+            Some("src/groups.rs")
+        );
 
-        let line = get_group(&captures, "line");
-        assert_eq!(line.as_str(), "33");
+        assert_eq!(
+            captures.name("line").map(|x| x.as_str()),
+            Some("33")
+        );
 
-        let column = get_group(&captures, "col");
-        assert_eq!(column.as_str(), "7");
+        assert_eq!(
+            captures.name("col").map(|x| x.as_str()),
+            Some("7")
+        );
     }
 }
 

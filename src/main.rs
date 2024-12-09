@@ -1,117 +1,24 @@
 mod cli;
 mod patterns;
+mod parser;
 
-use anyhow::Context;
+use parser::{Message, MessageParser};
+use anyhow::{Context, Result};
 use clap::Parser;
-use regex::Regex;
-use std::{io::{BufRead, BufReader}, process::{Child, Command, Stdio}};
+use std::{io::{BufRead, BufReader}, process::{Command, Stdio}};
 
-pub mod prelude {
-    pub use anyhow::{anyhow, Context as AnyhowContext, Result};
-}
-
-// TODO move these structs and add serialization
-/// Contains one message with its information, used for both errors and warnings
-#[derive(Debug, Clone)]
-struct Message {
-    pub is_error: bool,
-    pub msg: String,
-    pub file: String,
-    pub line: Option<usize>,
-    pub column: Option<usize>,
-    pub span: (usize, usize),
-}
+/// Length of the newline sequence in bytes (windows is \r\n while linux \n)
+const NEWLINE_LEN: usize = if cfg!(windows) { 2 } else { 1 };
 
 #[derive(Debug, Clone)]
-struct Report {
+pub struct Report {
     pub command: Vec<String>,
     pub root_directory: String,
     pub messages: Vec<Message>,
     // pub exit_code: u8,
 }
 
-pub fn capture_messages(regexes: &Vec<Regex>, input: &str) -> Vec<Message> {
-    let mut messages: Vec<Message> = vec![];
-
-    for pat in regexes {
-        let Some(captures) = pat.captures(input) else { continue };
-
-        let is_error = {
-            let r#type = match captures.name("type") {
-                Some(x) => match x.as_str().to_lowercase().as_str() {
-                    "error" => true,
-                    _ => false,
-                },
-                None => false,
-            };
-
-            let type_error = captures.name("type_error").is_some();
-
-            r#type || type_error
-        };
-
-        // TODO has a lot of unwraps
-        messages.push(Message {
-            is_error,
-            msg: captures.name("msg").unwrap().as_str().to_string(),
-            file: captures.name("file").unwrap().as_str().to_string(),
-            line: captures.name("line").map(|x| x.as_str().parse::<usize>().unwrap()),
-            column: captures.name("col").map(|x| x.as_str().parse::<usize>().unwrap()),
-            span: {
-                let m = captures.get(0).unwrap();
-
-                (m.start(), m.end())
-            },
-        });
-    }
-
-    messages
-}
-
-fn print_and_parse_pipe(child: &mut Child, regexes: &Vec<Regex>, messages: &mut Vec<Message>) {
-    let reader = BufReader::new(child.stdout.take().unwrap());
-
-    // preallocate the string, for the two lines
-    let mut string = String::new();
-    string.reserve(512);
-
-    // NOTE this is complicated cause i need to run regex on at 2 lines at time for some cases like
-    // cargo, otherwise i wont be able to catch whole pattern
-    let mut iter = reader.lines().peekable();
-    while let Some(curr) = iter.next() {
-        string = curr.as_ref().unwrap().clone();
-
-        // add the second line to the string so regex can work over the two lines
-        match iter.peek() {
-            Some(x) => {
-                string += "\n";
-                string += x.as_ref().unwrap();
-            },
-            // do nothing as there is no second line
-            None => {},
-        };
-
-        // print the line but to stderr
-        eprintln!("{}", curr.unwrap());
-
-        messages.extend(capture_messages(&regexes, &string));
-    }
-}
-
-fn main() -> prelude::Result<()> {
-    let args = cli::Cli::parse();
-
-    if args.list_regex {
-        println!("Printing all regex patterns");
-
-        for (name, pat) in patterns::GROUPS {
-            println!("{}: {:#?}", name, pat);
-        }
-        println!();
-
-        return Ok(());
-    }
-
+fn execute(args: cli::Cli) -> Result<()> {
     // TODO maybe add --quiet flag to silence this
     eprint!("Executing");
     for i in &args.command {
@@ -123,18 +30,13 @@ fn main() -> prelude::Result<()> {
     // eprintln!()
 
     // TODO option to use stderr instead of stdout
-    let mut handle = Command::new(args.command.first().unwrap())
+    let mut child = Command::new(args.command.first().unwrap())
         .args(args.command.iter().skip(1))
         .stdout(Stdio::piped())
         .spawn()
         .with_context(|| format!("Failed to execute command"))?;
 
-    // TODO use the actual groups
-    // compile regexes
-    let mut re: Vec<Regex> = vec![];
-    for pat in patterns::cargo::PATTERN.1 {
-        re.push(Regex::new(pat)?);
-    }
+    let mut parser = MessageParser::new(&vec![patterns::cargo::PATTERN])?;
 
     let mut report = Report {
         command: args.command.clone(),
@@ -142,10 +44,38 @@ fn main() -> prelude::Result<()> {
         messages: vec![],
     };
 
-    print_and_parse_pipe(&mut handle, &re, &mut report.messages);
+    let reader = BufReader::new(child.stdout.take().unwrap());
+
+    let mut string = String::new();
+    string.reserve(512);
+
+    // NOTE this whole mess is to allow regex to parse two lines at a time as some executors split
+    // the messages (ex. cargo)
+    let mut iter = reader.lines().peekable();
+    while let Some(curr) = iter.next() {
+        string = curr.as_ref().unwrap().clone();
+        let length = curr.as_ref().unwrap().len() + NEWLINE_LEN;
+
+        match iter.peek() {
+            Some(x) => {
+                // concat the second line so regex can work over both
+                string += "\n";
+                string += x.as_ref().unwrap();
+            },
+            // do nothing as there is no second line
+            None => {},
+        };
+
+        // print the line but to stderr
+        eprintln!("{}", curr.unwrap());
+
+        report.messages.extend(parser.parse(&string)?);
+
+        parser.advance(length);
+    }
 
     // TODO print exit status to stderr
-    let exit_result = handle.wait();
+    let exit_result = child.wait();
     println!("exit: {:?}", exit_result);
 
     match args.format {
@@ -184,4 +114,24 @@ fn main() -> prelude::Result<()> {
     // TODO return same exit code as the command ran
 
     Ok(())
+}
+
+fn main() -> Result<()> {
+    let args = cli::Cli::parse();
+
+    if args.list_regex {
+        println!("Printing all regex patterns");
+
+        for (name, pat) in patterns::GROUPS {
+            println!("{}: {:#?}", name, pat);
+        }
+        println!();
+
+        return Ok(());
+    }
+
+    let result = execute(args);
+
+    // TODO filter out and return same value
+    result
 }
