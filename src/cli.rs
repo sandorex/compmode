@@ -2,13 +2,24 @@ use clap::{Parser, ValueEnum};
 
 pub const FULL_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "-", env!("VERGEN_GIT_DESCRIBE"), " (", env!("VERGEN_GIT_BRANCH"), ")");
 
-pub const AFTER_HELP: &str = "If you wish to add support for another editor or executor please go to
-    https://github.com/sandorex/compmode-plugins
+pub const AFTER_HELP: &str = "If you wish to support or improve compmode go to
+    https://github.com/sandorex/compmode
 ";
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug, ValueEnum)]
 pub enum Format {
+    /// Format meant for testing
+    Debug,
     JSON,
+
+    /// Null terminated mode where only messages are printed, one per line
+    NULL,
+}
+
+impl ToString for Format {
+    fn to_string(&self) -> String {
+        format!("{:?}", self).to_lowercase()
+    }
 }
 
 /// Standalone utility to imitate emacs amazing compile-mode
@@ -17,14 +28,13 @@ pub enum Format {
 #[derive(Parser, Debug)]
 #[command(name = env!("CARGO_PKG_NAME"), author, version = FULL_VERSION, about, after_help = AFTER_HELP)]
 pub struct Cli {
-    // TODO
-    // /// Use specific API version, used to provide backward compatibility
-    // #[arg(long, default_value_t = 1)]
-    // pub api_version: u16,
+    /// Use specific API version, used to provide backward compatibility, '0' means latest
+    #[arg(long, default_value_t = 0)]
+    pub api_version: u16,
 
-    /// Output data in JSON format
-    #[arg(short, long)]
-    pub format: Option<Format>,
+    /// Output data in specific format, default is debug
+    #[arg(short, long, default_value_t = Format::Debug)]
+    pub format: Format,
 
     /// Explicitly use a specific regex group (ex. 'gcc' group for all flavours of gcc compiler)
     ///
@@ -34,11 +44,11 @@ pub struct Cli {
 
     // TODO but do not require the command
     // /// Lists all regexes builtin, does not do anything else
-    // #[arg(long)]
-    // pub list_regexes: bool,
+    #[arg(long)]
+    pub list_regex: bool,
 
     /// Command to execute
-    #[arg(last = true, required = true)]
+    #[arg(last = true, required_if_eq("list_regex", "false"))]
     pub command: Vec<String>,
 }
 
