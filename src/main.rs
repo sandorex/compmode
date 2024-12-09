@@ -1,67 +1,53 @@
 mod cli;
 mod patterns;
 mod parser;
+mod report;
 
-use cli::Format;
-use parser::{Message, MessageParser};
+use parser::MessageParser;
+use patterns::Pattern;
+use report::Report;
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
-use serde::Serialize;
 use std::{io::{BufRead, BufReader}, process::{Command, ExitCode, Stdio}};
 
 /// Length of the newline sequence in bytes (windows is \r\n while linux \n)
 const NEWLINE_LEN: usize = if cfg!(windows) { 2 } else { 1 };
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Report {
-    pub command: Vec<String>,
-    pub root_directory: String,
-    pub messages: Vec<Message>,
-    pub exit_code: i32,
-}
+fn pick_group(args: &cli::Cli) -> Result<MessageParser> {
+    let mut groups: Vec<&Pattern> = vec![];
 
-impl Report {
-    pub fn format_with(&self, format: Format, _version: u16) -> Result<String> {
-        let mut output = String::new();
-
-        match format {
-            cli::Format::Debug => {
-                output += format!("{:#?}", self).as_str();
-            },
-            cli::Format::JSON => {
-                let serialized = serde_json::to_string(self)
-                    .with_context(|| anyhow!("Failed to serialize report"))?;
-
-                output += format!("{}", serialized).as_str();
-            },
-            cli::Format::NULL => {
-                for msg in &self.messages {
-                    output += format!(
-                        "\n{}\0{}\0{}\0",
-                        if msg.is_error { "1" } else { "0" },
-                        msg.msg,
-                        msg.file,
-                    ).as_str();
-
-                    if let Some(line) = msg.line {
-                        output += line.to_string().as_str();
-                    }
-
-                    output += "\0";
-
-                    if let Some(col) = msg.column {
-                        output += col.to_string().as_str();
-                    }
-
+    match args.regex_group.as_str() {
+        "all" => groups.extend(patterns::GROUPS),
+        "auto" => todo!(),
+        // choose exact group
+        x => {
+            for group in patterns::GROUPS {
+                if group.0.to_lowercase() == x {
+                    groups.push(group);
+                    break;
                 }
             }
-        }
 
-        Ok(output)
+            if groups.is_empty() {
+                return Err(anyhow!("Could not find regex group {:?}", x));
+            }
+        }
     }
+
+    // if ! args.quiet {
+    //     eprint!("Regex groups used:" );
+    //     for (name, _) in &groups {
+    //         eprint!(" {name}");
+    //     }
+    //     eprintln!();
+    // }
+
+    Ok(MessageParser::new(&groups)?)
 }
 
 fn execute(args: cli::Cli) -> Result<i32> {
+    let mut parser = pick_group(&args)?;
+
     if ! args.quiet {
         eprint!("Executing");
         for i in &args.command {
@@ -71,16 +57,13 @@ fn execute(args: cli::Cli) -> Result<i32> {
         eprintln!("------------------------------------");
     }
 
-    // TODO print which groups are being loaded
-    // eprintln!()
+    // let mut parser = MessageParser::new(&vec![patterns::cargo::PATTERN])?;
 
     let mut child = Command::new(args.command.first().unwrap())
         .args(args.command.iter().skip(1))
-        .stdout(Stdio::piped())
+.stdout(Stdio::piped())
         .spawn()
         .with_context(|| format!("Failed to execute command"))?;
-
-    let mut parser = MessageParser::new(&vec![patterns::cargo::PATTERN])?;
 
     let mut report = Report {
         command: args.command.clone(),
@@ -130,7 +113,7 @@ fn execute(args: cli::Cli) -> Result<i32> {
     // get exit code or fallback as -1 if terminated by a signal
     report.exit_code = exit_result.code().unwrap_or(-1);
 
-    println!("{}", report.format_with(args.format, args.api_version)?);
+    println!("{}", report.format_with(args.format)?);
 
     // return same exit code
     Ok(report.exit_code)
@@ -140,10 +123,14 @@ fn main() -> ExitCode {
     let args = cli::Cli::parse();
 
     if args.list_regex {
-        println!("Printing all regex patterns");
+        println!("Listing all regex groups");
 
         for (name, pat) in patterns::GROUPS {
-            println!("{}: {:#?}", name, pat);
+            println!("{}:", name);
+
+            for i in pat.iter() {
+                println!("  {}", i);
+            }
         }
         println!();
 

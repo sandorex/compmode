@@ -64,7 +64,7 @@ pub struct MessageParser {
 }
 
 impl MessageParser {
-    pub fn new(groups: &Vec<Pattern>) -> Result<Self> {
+    pub fn new(groups: &Vec<&Pattern>) -> Result<Self> {
         let mut patterns: Vec<Regex> = vec![];
 
         for (_, pattern_group) in groups {
@@ -104,10 +104,6 @@ impl MessageParser {
 
     pub fn advance(&mut self, amount: usize) {
         self.position += amount;
-    }
-
-    pub fn reset(&mut self) {
-        self.position = 0;
     }
 }
 

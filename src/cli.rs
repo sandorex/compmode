@@ -12,6 +12,9 @@ pub enum Format {
     Debug,
     JSON,
 
+    /// Comma separated list, only messages are printed
+    CSV,
+
     /// Null terminated mode where only messages are printed, one per line
     NULL,
 }
@@ -30,10 +33,6 @@ impl ToString for Format {
 #[derive(Parser, Debug)]
 #[command(name = env!("CARGO_PKG_NAME"), author, version = FULL_VERSION, about, after_help = AFTER_HELP)]
 pub struct Cli {
-    /// Use specific API version, used to provide backward compatibility, '0' means latest
-    #[arg(long, default_value_t = 0)]
-    pub api_version: u16,
-
     /// Output data in specific format, default is debug
     #[arg(short, long, default_value_t = Format::Debug)]
     pub format: Format,
@@ -44,11 +43,12 @@ pub struct Cli {
 
     /// Explicitly use a specific regex group (ex. 'gcc' group for all flavours of gcc compiler)
     ///
-    /// If 'auto' then autodetect from the command, if unsuccessful use all of them
+    /// Special groups: 'all' - use all regex groups at once (could be bit slower)
+    ///                 'auto' - automatically detect which groups to use based on the command
     #[arg(short, long, default_value = "auto")]
     pub regex_group: String,
 
-    /// Lists all regexes builtin, then terminates the program
+    /// Lists all regex groups, then terminates the program
     #[arg(long)]
     pub list_regex: bool,
 

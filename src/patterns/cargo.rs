@@ -1,5 +1,5 @@
 define! {
-    PATTERN = [
+    CARGO = [
         r#"(?<type>error|warning): (?<msg>.+)\n *--> *(?<file>.+):(?<line>\d+):(?<col>\d+)"#,
     ];
 }
@@ -7,7 +7,7 @@ define! {
 #[cfg(test)]
 mod test {
     use regex::Regex;
-    use super::PATTERN;
+    use super::CARGO as PATTERN;
 
     const ERR_MSG: &str = r#"Compiling compmode v0.1.0 (/home/sandorex/ws/compmode)
 error: expected one of `!` or `::`, found `<eof>`

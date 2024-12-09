@@ -18,6 +18,6 @@ macro_rules! define {
 pub mod cargo;
 
 pub const GROUPS: &[&Pattern] = &[
-    &cargo::PATTERN,
+    &cargo::CARGO,
 ];
 
