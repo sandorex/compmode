@@ -22,6 +22,8 @@ impl ToString for Format {
     }
 }
 
+// TODO add option to buffer the input (with memory limit) and send using json
+
 /// Standalone utility to imitate emacs amazing compile-mode
 ///
 /// Intended for use through plugins which glue it into the editor
@@ -36,14 +38,17 @@ pub struct Cli {
     #[arg(short, long, default_value_t = Format::Debug)]
     pub format: Format,
 
+    /// Does not print any additional text (the executor stdout is still printed)
+    #[arg(short, long)]
+    pub quiet: bool,
+
     /// Explicitly use a specific regex group (ex. 'gcc' group for all flavours of gcc compiler)
     ///
     /// If 'auto' then autodetect from the command, if unsuccessful use all of them
     #[arg(short, long, default_value = "auto")]
     pub regex_group: String,
 
-    // TODO but do not require the command
-    // /// Lists all regexes builtin, does not do anything else
+    /// Lists all regexes builtin, then terminates the program
     #[arg(long)]
     pub list_regex: bool,
 

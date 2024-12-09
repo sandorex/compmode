@@ -1,11 +1,11 @@
 use regex::Regex;
 use anyhow::{Context, anyhow, Result};
-
+use serde::Serialize;
 use crate::patterns::Pattern;
 
 // TODO add serialization
 /// Contains one message with its information, used for both errors and warnings
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Message {
     pub is_error: bool,
     pub msg: String,
@@ -84,10 +84,6 @@ impl MessageParser {
 
     pub fn parse(&self, input: &str) -> anyhow::Result<Vec<Message>> {
         let mut messages: Vec<Message> = vec![];
-
-        // let process = |captures| -> anyhow::Result<()> {
-        //
-        // };
 
         for pat in &self.patterns {
             for captures in pat.captures_iter(input) {

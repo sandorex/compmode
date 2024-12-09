@@ -2,34 +2,78 @@ mod cli;
 mod patterns;
 mod parser;
 
+use cli::Format;
 use parser::{Message, MessageParser};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
-use std::{io::{BufRead, BufReader}, process::{Command, Stdio}};
+use serde::Serialize;
+use std::{io::{BufRead, BufReader}, process::{Command, ExitCode, Stdio}};
 
 /// Length of the newline sequence in bytes (windows is \r\n while linux \n)
 const NEWLINE_LEN: usize = if cfg!(windows) { 2 } else { 1 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Report {
     pub command: Vec<String>,
     pub root_directory: String,
     pub messages: Vec<Message>,
-    // pub exit_code: u8,
+    pub exit_code: i32,
 }
 
-fn execute(args: cli::Cli) -> Result<()> {
-    // TODO maybe add --quiet flag to silence this
-    eprint!("Executing");
-    for i in &args.command {
-        eprint!(" {:?}", i);
+impl Report {
+    pub fn format_with(&self, format: Format, _version: u16) -> Result<String> {
+        let mut output = String::new();
+
+        match format {
+            cli::Format::Debug => {
+                output += format!("{:#?}", self).as_str();
+            },
+            cli::Format::JSON => {
+                let serialized = serde_json::to_string(self)
+                    .with_context(|| anyhow!("Failed to serialize report"))?;
+
+                output += format!("{}", serialized).as_str();
+            },
+            cli::Format::NULL => {
+                for msg in &self.messages {
+                    output += format!(
+                        "\n{}\0{}\0{}\0",
+                        if msg.is_error { "1" } else { "0" },
+                        msg.msg,
+                        msg.file,
+                    ).as_str();
+
+                    if let Some(line) = msg.line {
+                        output += line.to_string().as_str();
+                    }
+
+                    output += "\0";
+
+                    if let Some(col) = msg.column {
+                        output += col.to_string().as_str();
+                    }
+
+                }
+            }
+        }
+
+        Ok(output)
     }
-    eprintln!();
+}
+
+fn execute(args: cli::Cli) -> Result<i32> {
+    if ! args.quiet {
+        eprint!("Executing");
+        for i in &args.command {
+            eprint!(" {:?}", i);
+        }
+        eprintln!();
+        eprintln!("------------------------------------");
+    }
 
     // TODO print which groups are being loaded
     // eprintln!()
 
-    // TODO option to use stderr instead of stdout
     let mut child = Command::new(args.command.first().unwrap())
         .args(args.command.iter().skip(1))
         .stdout(Stdio::piped())
@@ -42,6 +86,7 @@ fn execute(args: cli::Cli) -> Result<()> {
         command: args.command.clone(),
         root_directory: std::env::current_dir().unwrap().to_string_lossy().to_string(),
         messages: vec![],
+        exit_code: 0,
     };
 
     let reader = BufReader::new(child.stdout.take().unwrap());
@@ -71,52 +116,27 @@ fn execute(args: cli::Cli) -> Result<()> {
 
         report.messages.extend(parser.parse(&string)?);
 
+        // tell the parser that stream has advanced so span is correct
         parser.advance(length);
     }
 
-    // TODO print exit status to stderr
-    let exit_result = child.wait();
-    println!("exit: {:?}", exit_result);
+    let exit_result = child.wait()?;
 
-    match args.format {
-        cli::Format::Debug => {
-            println!("--- DEBUG REPORT ---");
-            println!("{:#?}", report);
-            println!("--- DEBUG REPORT ---");
-        },
-        cli::Format::JSON => {
-            todo!();
-        },
-        cli::Format::NULL => {
-            for msg in report.messages {
-                print!(
-                    "{}\0{}\0{}\0",
-                    if msg.is_error { "1" } else { "0" },
-                    msg.msg,
-                    msg.file,
-                );
-
-                if let Some(line) = msg.line {
-                    print!("{}", line);
-                }
-
-                print!("\0");
-
-                if let Some(col) = msg.column {
-                    print!("{}", col);
-                }
-
-                println!();
-            }
-        }
+    if ! args.quiet {
+        eprintln!("------------------------------------");
+        eprintln!("Child process {}", exit_result);
     }
 
-    // TODO return same exit code as the command ran
+    // get exit code or fallback as -1 if terminated by a signal
+    report.exit_code = exit_result.code().unwrap_or(-1);
 
-    Ok(())
+    println!("{}", report.format_with(args.format, args.api_version)?);
+
+    // return same exit code
+    Ok(report.exit_code)
 }
 
-fn main() -> Result<()> {
+fn main() -> ExitCode {
     let args = cli::Cli::parse();
 
     if args.list_regex {
@@ -127,11 +147,19 @@ fn main() -> Result<()> {
         }
         println!();
 
-        return Ok(());
+        return ExitCode::SUCCESS;
     }
 
     let result = execute(args);
 
-    // TODO filter out and return same value
-    result
+    // TODO maybe option to set exit code when error happens so it is detected
+    match result {
+        // turn i32 into u8..
+        Ok(x) => ExitCode::from(TryInto::<u8>::try_into(x).unwrap_or(1)),
+        Err(e) => {
+            eprintln!("{}", e);
+
+            ExitCode::FAILURE
+        },
+    }
 }
