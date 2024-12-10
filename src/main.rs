@@ -2,11 +2,12 @@ mod cli;
 mod patterns;
 mod parser;
 mod report;
+mod message;
 
 use parser::MessageParser;
 use patterns::pick_group;
 use report::Report;
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use clap::Parser;
 use std::{io::{BufRead, BufReader}, process::{Command, ExitCode, Stdio}};
 
@@ -93,24 +94,20 @@ fn main() -> ExitCode {
     let args = cli::Cli::parse();
 
     // TODO does not work with the new pattern types as there is no name stored
-    // if args.list_regex {
-    //     todo!()
-    //     println!("Listing all rege");
-    //
-    //     for pat in patterns::ALL {
-    //         println!("{}:", name);
-    //
-    //         for i in pat.iter() {
-    //             for j in i.iter() {
-    //                 println!("  {}", j);
-    //             }
-    //             println!();
-    //         }
-    //     }
-    //     println!();
-    //
-    //     return ExitCode::SUCCESS;
-    // }
+    if args.list_regex {
+        println!("Listing all regex groups");
+
+        for (name, patterns) in patterns::GROUPS.iter().zip(patterns::ALL.iter()) {
+            println!("{}:", name);
+
+            for pat in patterns.iter() {
+                println!("  {}", pat);
+            }
+        }
+        println!();
+
+        return ExitCode::SUCCESS;
+    }
 
     let result = execute(args);
 

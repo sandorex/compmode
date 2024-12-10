@@ -1,4 +1,4 @@
-use crate::parser::Message;
+use crate::message::Message;
 use crate::cli::Format;
 use anyhow::{anyhow, Result, Context};
 use serde::Serialize;

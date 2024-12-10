@@ -22,8 +22,6 @@ impl ToString for Format {
     }
 }
 
-// TODO add option to buffer the input (with memory limit) and send using json
-
 /// Standalone utility to imitate emacs amazing compile-mode
 ///
 /// Intended for use through plugins which glue it into the editor
@@ -34,6 +32,11 @@ pub struct Cli {
     #[arg(short, long, default_value_t = Format::Debug)]
     pub format: Format,
 
+    // TODO remember to set memory limit
+    // /// Buffers command stdout and returns it if format is `json`
+    // #[arg(short, long)]
+    // pub buffer_stdout: bool,
+
     /// Does not print any additional text (the executor stdout is still printed)
     #[arg(short, long)]
     pub quiet: bool,
@@ -42,15 +45,16 @@ pub struct Cli {
     ///
     /// Special groups: 'all' - use all regex groups at once (could be bit slower)
     ///                 'auto' - automatically detect which groups to use based on the command
-    #[arg(short, long, default_value = "auto")]
+    #[clap(verbatim_doc_comment)]
+    #[arg(short, long = "rgroup", default_value = "auto")]
     pub regex_group: String,
 
-    // /// Lists all regex groups, then terminates the program
-    // #[arg(long, default_value_t = false)]
-    // pub list_regex: bool,
+    /// Lists all regex groups, then terminates the program
+    #[arg(long)]
+    pub list_regex: bool,
 
     /// Command to execute
-    #[arg(last = true, required = true, num_args = 1..)]
+    #[arg(last = true, required_unless_present("list_regex"), num_args = 1..)]
     pub command: Vec<String>,
 }
 
