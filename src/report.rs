@@ -12,8 +12,11 @@ pub struct Report {
 }
 
 impl Report {
-    /// Formats as csv with any separator
+    /// Format as csv without any special logic
     fn format_csv(&self, separator: &str, output: &mut String) {
+        // add names of fields
+        *output += format!("is_error{separator}msg{separator}file{separator}line{separator}column").as_str();
+
         for msg in &self.messages {
             *output += format!(
                 "\n{}{separator}{}{separator}{}{separator}",
@@ -47,8 +50,7 @@ impl Report {
 
                 output += format!("{}", serialized).as_str();
             },
-            Format::CSV => self.format_csv(",", &mut output),
-            Format::NULL => self.format_csv("\0", &mut output),
+            Format::NullSep => self.format_csv("\0", &mut output),
         }
 
         Ok(output)

@@ -1,7 +1,8 @@
 use regex::Regex;
 use anyhow::{Context, anyhow, Result};
 use serde::Serialize;
-use crate::patterns::Pattern;
+
+use crate::patterns::PatternList;
 
 // TODO add serialization
 /// Contains one message with its information, used for both errors and warnings
@@ -64,14 +65,14 @@ pub struct MessageParser {
 }
 
 impl MessageParser {
-    pub fn new(groups: &Vec<&Pattern>) -> Result<Self> {
+    pub fn new(groups: &Vec<&PatternList>) -> Result<Self> {
         let mut patterns: Vec<Regex> = vec![];
 
-        for (_, pattern_group) in groups {
-            for pat in pattern_group.iter() {
+        for group in groups {
+            for pat in group.iter() {
                 patterns.push(
                     Regex::new(pat)
-                        .with_context(|| anyhow!("Failed to compile pattern {:?}", pat))?
+                    .with_context(|| anyhow!("Failed to compile pattern {:?}", pat))?
                 )
             }
         }

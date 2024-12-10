@@ -1,8 +1,8 @@
-define! {
-    CARGO = [
-        r#"(?<type>error|warning): (?<msg>.+)\n *--> *(?<file>.+):(?<line>\d+):(?<col>\d+)"#,
-    ];
-}
+use super::PatternList;
+
+pub const CARGO: PatternList = &[
+    r#"(?<type>error|warning): (?<msg>.+)\n *--> *(?<file>.+):(?<line>\d+):(?<col>\d+)"#,
+];
 
 #[cfg(test)]
 mod test {
@@ -33,7 +33,7 @@ warning: `compmode` (bin "compmode") generated 1 warning
 
     #[test]
     fn pattern_cargo_err() {
-        let re = Regex::new(PATTERN.1[0]);
+        let re = Regex::new(PATTERN[0]);
         assert!(re.is_ok(), "Pattern failed to compile");
         let re = re.unwrap();
 
@@ -69,7 +69,7 @@ warning: `compmode` (bin "compmode") generated 1 warning
 
     #[test]
     fn pattern_cargo_warn() {
-        let re = Regex::new(PATTERN.1[0]);
+        let re = Regex::new(PATTERN[0]);
         assert!(re.is_ok(), "Pattern failed to compile");
 
         let re = re.unwrap();

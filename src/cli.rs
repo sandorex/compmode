@@ -12,11 +12,8 @@ pub enum Format {
     Debug,
     JSON,
 
-    /// Comma separated list, only messages are printed
-    CSV,
-
-    /// Null terminated mode where only messages are printed, one per line
-    NULL,
+    /// CSV but with separator being \0, header and messages are printed
+    NullSep,
 }
 
 impl ToString for Format {
@@ -48,12 +45,12 @@ pub struct Cli {
     #[arg(short, long, default_value = "auto")]
     pub regex_group: String,
 
-    /// Lists all regex groups, then terminates the program
-    #[arg(long)]
-    pub list_regex: bool,
+    // /// Lists all regex groups, then terminates the program
+    // #[arg(long, default_value_t = false)]
+    // pub list_regex: bool,
 
     /// Command to execute
-    #[arg(last = true, required_if_eq("list_regex", "false"))]
+    #[arg(last = true, required = true, num_args = 1..)]
     pub command: Vec<String>,
 }
 

@@ -4,49 +4,18 @@ mod parser;
 mod report;
 
 use parser::MessageParser;
-use patterns::Pattern;
+use patterns::pick_group;
 use report::Report;
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use std::{io::{BufRead, BufReader}, process::{Command, ExitCode, Stdio}};
 
-/// Length of the newline sequence in bytes (windows is \r\n while linux \n)
-const NEWLINE_LEN: usize = if cfg!(windows) { 2 } else { 1 };
-
-fn pick_group(args: &cli::Cli) -> Result<MessageParser> {
-    let mut groups: Vec<&Pattern> = vec![];
-
-    match args.regex_group.as_str() {
-        "all" => groups.extend(patterns::GROUPS),
-        "auto" => todo!(),
-        // choose exact group
-        x => {
-            for group in patterns::GROUPS {
-                if group.0.to_lowercase() == x {
-                    groups.push(group);
-                    break;
-                }
-            }
-
-            if groups.is_empty() {
-                return Err(anyhow!("Could not find regex group {:?}", x));
-            }
-        }
-    }
-
-    // if ! args.quiet {
-    //     eprint!("Regex groups used:" );
-    //     for (name, _) in &groups {
-    //         eprint!(" {name}");
-    //     }
-    //     eprintln!();
-    // }
-
-    Ok(MessageParser::new(&groups)?)
-}
-
 fn execute(args: cli::Cli) -> Result<i32> {
-    let mut parser = pick_group(&args)?;
+    let mut parser = {
+        let groups = pick_group(&args.regex_group, args.command.first().unwrap())?;
+
+        MessageParser::new(&groups)?
+    };
 
     if ! args.quiet {
         eprint!("Executing");
@@ -56,8 +25,6 @@ fn execute(args: cli::Cli) -> Result<i32> {
         eprintln!();
         eprintln!("------------------------------------");
     }
-
-    // let mut parser = MessageParser::new(&vec![patterns::cargo::PATTERN])?;
 
     let mut child = Command::new(args.command.first().unwrap())
         .args(args.command.iter().skip(1))
@@ -76,6 +43,9 @@ fn execute(args: cli::Cli) -> Result<i32> {
 
     let mut string = String::new();
     string.reserve(512);
+
+    /// Length of the newline sequence in bytes (windows is \r\n while linux \n)
+    const NEWLINE_LEN: usize = if cfg!(windows) { 2 } else { 1 };
 
     // NOTE this whole mess is to allow regex to parse two lines at a time as some executors split
     // the messages (ex. cargo)
@@ -122,24 +92,28 @@ fn execute(args: cli::Cli) -> Result<i32> {
 fn main() -> ExitCode {
     let args = cli::Cli::parse();
 
-    if args.list_regex {
-        println!("Listing all regex groups");
-
-        for (name, pat) in patterns::GROUPS {
-            println!("{}:", name);
-
-            for i in pat.iter() {
-                println!("  {}", i);
-            }
-        }
-        println!();
-
-        return ExitCode::SUCCESS;
-    }
+    // TODO does not work with the new pattern types as there is no name stored
+    // if args.list_regex {
+    //     todo!()
+    //     println!("Listing all rege");
+    //
+    //     for pat in patterns::ALL {
+    //         println!("{}:", name);
+    //
+    //         for i in pat.iter() {
+    //             for j in i.iter() {
+    //                 println!("  {}", j);
+    //             }
+    //             println!();
+    //         }
+    //     }
+    //     println!();
+    //
+    //     return ExitCode::SUCCESS;
+    // }
 
     let result = execute(args);
 
-    // TODO maybe option to set exit code when error happens so it is detected
     match result {
         // turn i32 into u8..
         Ok(x) => ExitCode::from(TryInto::<u8>::try_into(x).unwrap_or(1)),
