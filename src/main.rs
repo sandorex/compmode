@@ -4,18 +4,102 @@ mod parser;
 mod report;
 mod message;
 
-use parser::MessageParser;
+use message::Message;
 use patterns::pick_group;
+use regex::Regex;
 use report::Report;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use std::{io::{BufRead, BufReader}, process::{Command, ExitCode, Stdio}};
 
+fn parse_n_print<T>(_args: &cli::Cli,
+                    patterns: &Vec<Regex>,
+                    childio: T,
+                    report: &mut Report
+                    ) -> Result<()> where T: std::io::Read {
+    let reader = BufReader::new(childio);
+
+    let mut string = String::new();
+    string.reserve(512);
+
+    let mut position: usize = 0;
+
+    // NOTE this whole mess is to allow regex to parse two lines at a time as some executors split
+    // the messages (ex. cargo)
+    let mut iter = reader.lines().peekable();
+    while let Some(curr) = iter.next() {
+        /// Length of the newline sequence in bytes (windows is \r\n while linux \n)
+        const NEWLINE_LEN: usize = if cfg!(windows) { 2 } else { 1 };
+
+        string = curr.as_ref().unwrap().clone();
+        let curr_length = string.len() + NEWLINE_LEN;
+        let mut total_length = curr_length;
+
+        match iter.peek() {
+            Some(x) => {
+                // concat the second line so regex can work over both
+                string += "\n";
+                string += x.as_ref().unwrap();
+
+                // add the length of the line to total
+                total_length += x.as_ref().unwrap().len() + NEWLINE_LEN;
+            },
+            // do nothing as there is no second line
+            None => {},
+        };
+
+        // print the line but to stderr
+        eprintln!("{}", curr.as_ref().unwrap());
+
+        if let Some(capture) = parser::capture_first(patterns, &string) {
+            let mut msg = match TryInto::<Message>::try_into(&capture) {
+                Ok(x) => x,
+                Err(x) => {
+                    // TODO give more information
+                    eprintln!("[compmode]: Error invalid capture: {}", x);
+                    continue
+                },
+            };
+
+            // correct the span
+            msg.span = (
+                msg.span.0 + position,
+                msg.span.1 + position
+            );
+
+            // TODO check if this works on windows with '\r\n'!
+            // if the capture has a newline in its whole span then it probably takes both lines
+            if capture.get(0).unwrap().as_str().contains('\n') {
+                position += total_length;
+
+                // skip next line as it was already consumed
+                iter.next();
+            } else {
+                position += curr_length;
+            }
+
+            report.messages.push(msg);
+        }
+    }
+
+    Ok(())
+}
+
 fn execute(args: cli::Cli) -> Result<i32> {
-    let mut parser = {
+    let patterns = {
         let groups = pick_group(&args.regex_group, args.command.first().unwrap())?;
 
-        MessageParser::new(&groups)?
+        let mut patterns: Vec<Regex> = vec![];
+
+        // compile all patterns
+        for group in groups {
+            for pat in group.iter() {
+                patterns.push(Regex::new(pat)
+                    .with_context(|| anyhow!("Could not compile {:?}", pat))?);
+            }
+        }
+
+        patterns
     };
 
     if ! args.quiet {
@@ -29,7 +113,7 @@ fn execute(args: cli::Cli) -> Result<i32> {
 
     let mut child = Command::new(args.command.first().unwrap())
         .args(args.command.iter().skip(1))
-.stdout(Stdio::piped())
+        .stdout(Stdio::piped())
         .spawn()
         .with_context(|| format!("Failed to execute command"))?;
 
@@ -40,39 +124,7 @@ fn execute(args: cli::Cli) -> Result<i32> {
         exit_code: 0,
     };
 
-    let reader = BufReader::new(child.stdout.take().unwrap());
-
-    let mut string = String::new();
-    string.reserve(512);
-
-    /// Length of the newline sequence in bytes (windows is \r\n while linux \n)
-    const NEWLINE_LEN: usize = if cfg!(windows) { 2 } else { 1 };
-
-    // NOTE this whole mess is to allow regex to parse two lines at a time as some executors split
-    // the messages (ex. cargo)
-    let mut iter = reader.lines().peekable();
-    while let Some(curr) = iter.next() {
-        string = curr.as_ref().unwrap().clone();
-        let length = curr.as_ref().unwrap().len() + NEWLINE_LEN;
-
-        match iter.peek() {
-            Some(x) => {
-                // concat the second line so regex can work over both
-                string += "\n";
-                string += x.as_ref().unwrap();
-            },
-            // do nothing as there is no second line
-            None => {},
-        };
-
-        // print the line but to stderr
-        eprintln!("{}", curr.unwrap());
-
-        report.messages.extend(parser.parse(&string)?);
-
-        // tell the parser that stream has advanced so span is correct
-        parser.advance(length);
-    }
+    parse_n_print(&args, &patterns, child.stdout.take().unwrap(), &mut report)?;
 
     let exit_result = child.wait()?;
 
@@ -93,7 +145,6 @@ fn execute(args: cli::Cli) -> Result<i32> {
 fn main() -> ExitCode {
     let args = cli::Cli::parse();
 
-    // TODO does not work with the new pattern types as there is no name stored
     if args.list_regex {
         println!("Listing all regex groups");
 

@@ -3,20 +3,23 @@ use anyhow::{Result, anyhow};
 pub type PatternList = &'static [ &'static str ];
 
 pub mod cargo;
+pub mod gcc;
 
 pub const ALL: &[&PatternList] = &[
     &cargo::CARGO,
+    &gcc::GCC,
 ];
 
 pub const GROUPS: &[&str] = &[
     "cargo",
+    "gcc",
 ];
 
 #[cfg(test)]
 #[test]
 fn ensure_groups_are_correct() {
     // NOTE: simple test to ensure i keep groups and all in sync
-    assert_eq!(ALL.len(), GROUPS.len());
+    assert_eq!(ALL.len(), GROUPS.len(), "ALL.len() != GROUPS.len()");
 }
 
 fn pick_by_executable(_exe: &str, _groups: &mut Vec<&PatternList>) {

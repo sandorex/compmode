@@ -1,37 +1,30 @@
 use super::PatternList;
 
-pub const CARGO: PatternList = &[
-    r#"^(?<type>error|warning): (?<msg>.+)\n *--> *(?<file>.+):(?<line>\d+):(?<col>\d+)"#,
+pub const GCC: PatternList = &[
+    r#"^(?<file>.+):(?<line>\d+):(?<col>\d+): (?<type>error|warning): (?<msg>[^\n]+)"#,
 ];
 
 #[cfg(test)]
 mod test {
     use regex::Regex;
-    use super::CARGO as PATTERN;
+    use super::GCC as PATTERN;
 
-    const ERR_MSG: &str = r#"error: expected one of `!` or `::`, found `<eof>`
-  --> src/groups.rs:33:1
-   |
-33 | hehe
-   | ^^^^ expected one of `!` or `::`
+    const ERR_MSG: &str = r#"main.c:4:29: error: expected ‘;’ before ‘return’
+    4 |     printf("Hello World!\n")
+      |                             ^
+      |                             ;
+    5 |     return 1;
+      |     ~~~~~~
+      "#;
 
-error: could not compile `compmode` (bin "compmode") due to 1 previous error
-"#;
-
-    const WARN_MSG: &str = r#"warning: constant `x` should have an upper case name
-  --> src/groups.rs:33:7
-   |
-33 | const x: u8 = 2;
-   |       ^ help: convert the identifier to upper case (notice the capitalization): `X`
-   |
-   = note: `#[warn(non_upper_case_globals)]` on by default
-
-warning: `compmode` (bin "compmode") generated 1 warning
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.39s
-"#;
+    const WARN_MSG: &str = r#"main.c:7:13: warning: format ‘%s’ expects argument of type ‘char *’, but argument 2 has type ‘int’ [-Wformat=]
+    7 |     printf (fmt, 123);
+      |             ^~~  ~~~
+      |                  |
+      |                  int"#;
 
     #[test]
-    fn pattern_cargo_err() {
+    fn pattern_gcc_err() {
         let re = Regex::new(PATTERN[0]);
         assert!(re.is_ok(), "Pattern failed to compile");
         let re = re.unwrap();
@@ -47,27 +40,27 @@ warning: `compmode` (bin "compmode") generated 1 warning
 
         assert_eq!(
             captures.name("msg").map(|x| x.as_str()),
-            Some("expected one of `!` or `::`, found `<eof>`")
+            Some("expected ‘;’ before ‘return’")
         );
 
         assert_eq!(
             captures.name("file").map(|x| x.as_str()),
-            Some("src/groups.rs")
+            Some("main.c")
         );
 
         assert_eq!(
             captures.name("line").map(|x| x.as_str()),
-            Some("33")
+            Some("4")
         );
 
         assert_eq!(
             captures.name("col").map(|x| x.as_str()),
-            Some("1")
+            Some("29")
         );
     }
 
     #[test]
-    fn pattern_cargo_warn() {
+    fn pattern_gcc_warn() {
         let re = Regex::new(PATTERN[0]);
         assert!(re.is_ok(), "Pattern failed to compile");
 
@@ -84,23 +77,22 @@ warning: `compmode` (bin "compmode") generated 1 warning
 
         assert_eq!(
             captures.name("msg").map(|x| x.as_str()),
-            Some("constant `x` should have an upper case name")
+            Some("format ‘%s’ expects argument of type ‘char *’, but argument 2 has type ‘int’ [-Wformat=]")
         );
 
         assert_eq!(
             captures.name("file").map(|x| x.as_str()),
-            Some("src/groups.rs")
+            Some("main.c")
         );
 
         assert_eq!(
             captures.name("line").map(|x| x.as_str()),
-            Some("33")
+            Some("7")
         );
 
         assert_eq!(
             captures.name("col").map(|x| x.as_str()),
-            Some("7")
+            Some("13")
         );
     }
 }
-
